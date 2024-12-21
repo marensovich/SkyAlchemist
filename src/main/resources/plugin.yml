@@ -1,0 +1,11 @@
+name: SkyAlchemist
+version: '1.0-SNAPSHOT'
+main: org.k0rv1nes.skyAlchemist.AlchemistPlugin
+api-version: '1.18'
+depend: [Vault]
+description: A plugin for combining potions with an economy system.
+author: k0rv1nes
+commands:
+  alchemist:
+    description: Opens the alchemist menu to combine potions.
+    usage: /alchemist
