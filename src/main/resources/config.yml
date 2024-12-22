@@ -13,7 +13,6 @@ start-price: 100.0 # Базовая цена
 price-procent: 1.5 # Множитель для экспоненциального увеличения
 
 economy:
-  withdraw-command: "points take {player} {amount}"
   withdraw-message: "&x&0&f&9&b&0&fС вас списано {amount} £ за скрещивание эффектов."
 
 messages:

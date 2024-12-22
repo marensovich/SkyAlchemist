@@ -1,5 +1,7 @@
 package org.k0rv1nes.skyAlchemist;
 
+import org.black_ixx.playerpoints.PlayerPoints;
+import org.black_ixx.playerpoints.PlayerPointsAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Material;
@@ -28,12 +30,20 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
 
     private FileConfiguration config;
     private final Map<String, Inventory> openInventories = new HashMap<>();
+    private PlayerPointsAPI playerPointsAPI;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         config = getConfig();
-
+        PlayerPoints playerPoints = (PlayerPoints) Bukkit.getPluginManager().getPlugin("PlayerPoints");
+        if (playerPoints != null) {
+            playerPointsAPI = playerPoints.getAPI();
+        } else {
+            getLogger().severe("PlayerPoints не найден! Отключение плагина.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("alchemist")).setExecutor(this);
         getLogger().info("AlchemistPlugin enabled.");
@@ -184,12 +194,18 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
         // Округляем цену до ближайшего целого числа
         int roundedPrice = (int) Math.round(price);
 
-        // Выполнение команды для снятия денег
-        String withdrawCommand = config.getString("economy.withdraw-command", "points take {player} {amount}");
-        withdrawCommand = withdrawCommand.replace("{player}", player.getName()).replace("{amount}", String.valueOf(roundedPrice));
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), withdrawCommand);
+        // Проверяем баланс игрока
+        if (playerPointsAPI.look(player.getUniqueId()) < roundedPrice) {
+            player.sendMessage(colorize(config.getString("menu.not-enough-money", "&cНа вашем счете недостаточно средств")));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+            return;
+        }
 
-        String withdrawMessage = config.getString("economy.withdraw-message", "&x&0&f&9&b&0&fС вас списано {amount} £ за скрещивание эффектов.");
+        // Снимаем деньги с игрока
+        playerPointsAPI.take(player.getUniqueId(), roundedPrice);
+
+        // Отправляем сообщение игроку о списании денег
+        String withdrawMessage = config.getString("economy.withdraw-message", "&aС вас списано {amount} $.");
         withdrawMessage = withdrawMessage.replace("{amount}", String.valueOf(roundedPrice));
         player.sendMessage(colorize(withdrawMessage));
 

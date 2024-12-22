@@ -2,6 +2,7 @@ name: SkyAlchemist
 version: '1.0-SNAPSHOT'
 main: org.k0rv1nes.skyAlchemist.AlchemistPlugin
 api-version: '1.18'
+depend: [PlayerPoints]
 description: Плагин для скрещивания эффектов зелий за определенную цену.
 author: k0rv1nes
 commands:
