@@ -1,0 +1,22 @@
+menu:
+  name: "&0&l> &0Алхимик &7&l| &0/alchemist"
+  cross-button-name: "&x&0&f&9&b&0&fСкрестить эффекты"
+  cross-button-material: LIME_DYE
+  quit-button-name: "&x&b&d&3&f&3&2Выйти"
+  quit-button-material: STRUCTURE_VOID
+  cross-potion-name: "&6&lСкрещенное зелье"
+  cross-potion-color: [1, 1, 1] # RGB
+  price-string: "\n&7Стоимость скрещивания: &x&f&4&d&0&3&f&l%price% $"
+  not-enough-money: "&x&f&4&d&0&3&f&l▸ &cНа вашем счете недостаточно средств."
+
+start-price: 100.0 # Базовая цена
+price-procent: 1.5 # Множитель для экспоненциального увеличения
+
+economy:
+  withdraw-command: "points take {player} {amount}"
+  withdraw-message: "&x&0&f&9&b&0&fС вас списано {amount} £ за скрещивание эффектов."
+
+messages:
+  no-permission: "&cУ вас нет прав для выполнения этой команды."
+  reload-success: "&aКонфигурация успешно перезагружена."
+  only-player: "&cКоманда доступна только игрокам"

@@ -1,6 +1,5 @@
 package org.k0rv1nes.skyAlchemist;
 
-import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Material;
@@ -8,6 +7,7 @@ import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -15,25 +15,24 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 import java.util.*;
 
 public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, Listener {
 
-    private static Economy economy = null;
+    private FileConfiguration config;
     private final Map<String, Inventory> openInventories = new HashMap<>();
 
     @Override
     public void onEnable() {
-        if (!setupEconomy()) {
-            getLogger().severe("Vault not found! Disabling plugin.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
+        saveDefaultConfig();
+        config = getConfig();
 
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("alchemist")).setExecutor(this);
@@ -45,46 +44,65 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
         getLogger().info("AlchemistPlugin disabled.");
     }
 
-    private boolean setupEconomy() {
-        if (getServer().getPluginManager().getPlugin("Vault") == null) {
-            return false;
-        }
-        RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
-        if (rsp == null) {
-            return false;
-        }
-        economy = rsp.getProvider();
-        return economy != null;
-    }
-
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("This command can only be used by players.");
+        if (command.getName().equalsIgnoreCase("alchemist")) {
+            if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+                if (!sender.hasPermission("alchemist.reload")) {
+                    sender.sendMessage(colorize(config.getString("messages.no-permission", "&cУ вас нет прав для выполнения этой команды.")));
+                    return true;
+                }
+                reloadConfig();
+                config = getConfig();
+                sender.sendMessage(colorize(config.getString("messages.reload-success", "&aКонфигурация успешно перезагружена.")));
+                return true;
+            }
+
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(colorize(Objects.requireNonNull(config.getString("messages.only-player"))));
+                return true;
+            }
+
+            Inventory menu = createMenu();
+            openInventories.put(player.getName(), menu);
+            player.openInventory(menu);
             return true;
         }
-
-        Inventory menu = createMenu();
-        openInventories.put(player.getName(), menu);
-        player.openInventory(menu);
-        return true;
+        return false;
     }
 
     private Inventory createMenu() {
-        Inventory inventory = Bukkit.createInventory(null, 54, "Alchemist");
+        String menuName = config.getString("menu.name", "&7Алхимик:");
+        Inventory inventory = Bukkit.createInventory(null, 54, colorize(menuName));
 
         ItemStack glassPane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemStack confirmButton = new ItemStack(Material.EMERALD_BLOCK);
-        ItemStack cancelButton = new ItemStack(Material.REDSTONE_BLOCK);
+        ItemStack confirmButton = createButton(config.getString("menu.cross-button-material", "GREEN_STAINED_GLASS_PANE"),
+                config.getString("menu.cross-button-name", "&a&lСкрестить зелья"));
+        ItemStack cancelButton = createButton(config.getString("menu.quit-button-material", "RED_STAINED_GLASS_PANE"),
+                config.getString("menu.quit-button-name", "&cВыйти"));
 
         for (int i = 36; i < 54; i++) {
             inventory.setItem(i, glassPane);
         }
         inventory.setItem(45, cancelButton);
-        inventory.setItem(49, new ItemStack(Material.GLASS_BOTTLE));  // Placeholder for the result potion
+        inventory.setItem(49, new ItemStack(Material.GLASS_BOTTLE));
         inventory.setItem(53, confirmButton);
 
         return inventory;
+    }
+
+    private ItemStack createButton(String materialName, String displayName) {
+        Material material = Material.matchMaterial(materialName);
+        if (material == null) {
+            material = Material.STONE;
+        }
+        ItemStack button = new ItemStack(material);
+        ItemMeta meta = button.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(colorize(displayName));
+            button.setItemMeta(meta);
+        }
+        return button;
     }
 
     @EventHandler
@@ -99,115 +117,114 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
 
         if (slot >= 36) {
             event.setCancelled(true);
-            if (slot == 45) { // Cancel
+            if (slot == 45) {
                 player.closeInventory();
-            } else if (slot == 53) { // Confirm
+            } else if (slot == 53) {
                 processPotions(player, inventory);
             }
             return;
         }
 
         ItemStack cursorItem = event.getCursor();
-        if (cursorItem != null && cursorItem.getType() == Material.POTION) {
-            return; // Разрешить добавление зелья
+        if (cursorItem != null && (cursorItem.getType() == Material.POTION || cursorItem.getType() == Material.SPLASH_POTION || cursorItem.getType() == Material.LINGERING_POTION)) {
+            return;
         }
 
         event.setCancelled(true);
     }
 
     private void processPotions(Player player, Inventory inventory) {
-        ItemStack result = createResultPotion(inventory);
-        if (result == null) {
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
-            player.sendMessage("You need to combine at least one potion.");
-            return;
-        }
-
-        double price = calculatePrice(inventory);
-        if (economy.getBalance(player) < price) {
-            player.sendMessage("You don't have enough money!");
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
-            return;
-        }
-
-        economy.withdrawPlayer(player, price);
-        player.getInventory().addItem(result);
-        inventory.clear();
-        player.closeInventory();
-        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
-    }
-
-    private ItemStack createResultPotion(Inventory inventory) {
         List<PotionEffect> potionEffects = new ArrayList<>();
-        boolean isValidPotionType = true;
         Material potionType = null;
         boolean isSplash = false;
         boolean isLingering = false;
 
-        // Логирование на каждом шаге
-        getLogger().info("Scanning inventory for potions...");
-
         for (int i = 0; i < 36; i++) {
             ItemStack item = inventory.getItem(i);
-            if (item != null && item.getType() == Material.POTION && item.hasItemMeta()) {
-                getLogger().info("Potion found at slot " + i);
-
+            if (item != null && (item.getType() == Material.POTION || item.getType() == Material.SPLASH_POTION || item.getType() == Material.LINGERING_POTION)) {
                 PotionMeta meta = (PotionMeta) item.getItemMeta();
                 if (meta != null) {
+                    // Добавляем пользовательские эффекты
+                    potionEffects.addAll(meta.getCustomEffects());
+
+                    // Добавляем стандартные эффекты зелий
+                    PotionData potionData = meta.getBasePotionData();
+                    PotionEffectType effectType = potionData.getType().getEffectType();
+                    if (effectType != null) {
+                        PotionEffect effect = new PotionEffect(effectType, potionData.isExtended() ? 9600 : 3600, potionData.isUpgraded() ? 1 : 0);
+                        potionEffects.add(effect);
+                    }
+
                     if (potionType == null) {
                         potionType = item.getType();
                     } else if (potionType != item.getType()) {
-                        isValidPotionType = false;
-                        break; // Если типы разные, прекращаем обработку
+                        player.sendMessage(colorize(config.getString("menu.not-enough-money", "&cНа вашем счете недостаточно средств")));
+                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+                        return;
                     }
 
-                    // Определяем, является ли зелье туманным или взрывным
                     if (item.getType() == Material.SPLASH_POTION) {
                         isSplash = true;
                     } else if (item.getType() == Material.LINGERING_POTION) {
                         isLingering = true;
                     }
-
-                    // Добавляем эффекты этого зелья в список
-                    potionEffects.addAll(meta.getCustomEffects());
                 }
             }
         }
 
-        // Логирование, если нет эффектов
         if (potionEffects.isEmpty()) {
-            getLogger().info("No potions with effects found.");
+            player.sendMessage(colorize(config.getString("menu.not-enough-money", "&cНа вашем счете недостаточно средств")));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+            return;
         }
 
-        if (!isValidPotionType || potionEffects.isEmpty()) {
-            return null;
-        }
+        ItemStack resultPotion = createResultPotion(potionType, isSplash, isLingering, potionEffects);
+        double price = calculatePrice(potionEffects.size());
 
-        // Если есть разные типы зелий (например, обычное и туманное), возвращаем null
-        if (isSplash && isLingering || isSplash && potionType != Material.SPLASH_POTION || isLingering && potionType != Material.LINGERING_POTION) {
-            return null;
-        }
+        // Округляем цену до ближайшего целого числа
+        int roundedPrice = (int) Math.round(price);
 
-        // Создаем новое зелье в зависимости от типа
+        // Выполнение команды для снятия денег
+        String withdrawCommand = config.getString("economy.withdraw-command", "points take {player} {amount}");
+        withdrawCommand = withdrawCommand.replace("{player}", player.getName()).replace("{amount}", String.valueOf(roundedPrice));
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), withdrawCommand);
+
+        String withdrawMessage = config.getString("economy.withdraw-message", "&x&0&f&9&b&0&fС вас списано {amount} £ за скрещивание эффектов.");
+        withdrawMessage = withdrawMessage.replace("{amount}", String.valueOf(roundedPrice));
+        player.sendMessage(colorize(withdrawMessage));
+
+        player.getInventory().addItem(resultPotion);
+        inventory.clear();
+        player.closeInventory();
+        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
+    }
+
+    private ItemStack createResultPotion(Material potionType, boolean isSplash, boolean isLingering, List<PotionEffect> effects) {
         ItemStack resultPotion;
         if (isSplash) {
             resultPotion = new ItemStack(Material.SPLASH_POTION);
         } else if (isLingering) {
             resultPotion = new ItemStack(Material.LINGERING_POTION);
         } else {
-            resultPotion = new ItemStack(Material.POTION); // Обычное зелье
+            resultPotion = new ItemStack(Material.POTION);
         }
 
-        PotionMeta resultMeta = (PotionMeta) resultPotion.getItemMeta();
-        if (resultMeta == null) return null;
+        PotionMeta meta = (PotionMeta) resultPotion.getItemMeta();
+        if (meta == null) return null;
 
-        // Добавляем все эффекты из собранных зелий
-        for (PotionEffect effect : potionEffects) {
-            resultMeta.addCustomEffect(effect, true); // Добавляем эффект
+        for (PotionEffect effect : effects) {
+            meta.addCustomEffect(effect, true);
         }
 
-        resultMeta.setColor(Color.PURPLE); // Можно добавить логику для определения цвета
-        resultPotion.setItemMeta(resultMeta);
+        List<Integer> colorRGB = config.getIntegerList("menu.cross-potion-color");
+        if (colorRGB.size() == 3) {
+            meta.setColor(Color.fromRGB(colorRGB.get(0), colorRGB.get(1), colorRGB.get(2)));
+        } else {
+            meta.setColor(Color.PURPLE);
+        }
+
+        meta.setDisplayName(colorize(config.getString("menu.cross-potion-name", "&eСкрещенное зелье")));
+        resultPotion.setItemMeta(meta);
         return resultPotion;
     }
 
@@ -219,28 +236,20 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
         if (openInventories.remove(player.getName()) == inventory) {
             for (int i = 0; i < 36; i++) {
                 ItemStack item = inventory.getItem(i);
-                if (item != null && item.getType() == Material.POTION) {
+                if (item != null && (item.getType() == Material.POTION || item.getType() == Material.SPLASH_POTION || item.getType() == Material.LINGERING_POTION)) {
                     player.getInventory().addItem(item);
                 }
             }
         }
     }
 
+    private double calculatePrice(int effectCount) {
+        double basePrice = config.getDouble("start-price", 100.0);
+        double multiplier = config.getDouble("price-procent", 1.5);
+        return basePrice * Math.pow(multiplier, effectCount);
+    }
 
-
-
-    private double calculatePrice(Inventory inventory) {
-        int potionCount = 0;
-
-        for (int i = 0; i < 36; i++) {
-            ItemStack item = inventory.getItem(i);
-            if (item != null && item.getType() == Material.POTION) {
-                potionCount++;
-            }
-        }
-
-        double basePrice = 10.0;
-        double multiplier = 1.5;
-        return basePrice * Math.pow(multiplier, potionCount - 1);
+    private String colorize(String text) {
+        return text.replace('&', '§');
     }
 }
