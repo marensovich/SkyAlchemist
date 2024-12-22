@@ -6,11 +6,11 @@ menu:
   quit-button-material: STRUCTURE_VOID
   cross-potion-name: "&6&lСкрещенное зелье"
   cross-potion-color: [1, 1, 1] # RGB
-  price-string: "\n&7Стоимость скрещивания: &x&f&4&d&0&3&f&l%price% $"
+  price-string: "&7Стоимость скрещивания: &x&f&4&d&0&3&f&l%price% £.\n&7У вас сейчас: &x&f&4&d&0&3&f&l%playerpoints_points% £."
   not-enough-money: "&x&f&4&d&0&3&f&l▸ &cНа вашем счете недостаточно средств."
 
 start-price: 100.0 # Базовая цена
-price-procent: 1.5 # Множитель для экспоненциального увеличения
+price-procent: 1.25 # Множитель для экспоненциального увеличения
 
 economy:
   withdraw-message: "&x&0&f&9&b&0&fС вас списано {amount} £ за скрещивание эффектов."

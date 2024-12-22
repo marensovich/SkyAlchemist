@@ -137,6 +137,14 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
 
         ItemStack cursorItem = event.getCursor();
         if (cursorItem != null && (cursorItem.getType() == Material.POTION || cursorItem.getType() == Material.SPLASH_POTION || cursorItem.getType() == Material.LINGERING_POTION)) {
+            event.setCancelled(false);
+            return;
+        }
+
+        if (event.getClick().isRightClick() && inventory.getItem(slot) != null &&
+                (inventory.getItem(slot).getType() == Material.POTION || inventory.getItem(slot).getType() == Material.SPLASH_POTION || inventory.getItem(slot).getType() == Material.LINGERING_POTION)) {
+            player.getInventory().addItem(inventory.getItem(slot));
+            inventory.setItem(slot, null);
             return;
         }
 
@@ -154,10 +162,8 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
             if (item != null && (item.getType() == Material.POTION || item.getType() == Material.SPLASH_POTION || item.getType() == Material.LINGERING_POTION)) {
                 PotionMeta meta = (PotionMeta) item.getItemMeta();
                 if (meta != null) {
-                    // Добавляем пользовательские эффекты
                     potionEffects.addAll(meta.getCustomEffects());
 
-                    // Добавляем стандартные эффекты зелий
                     PotionData potionData = meta.getBasePotionData();
                     PotionEffectType effectType = potionData.getType().getEffectType();
                     if (effectType != null) {
@@ -190,21 +196,16 @@ public class AlchemistPlugin extends JavaPlugin implements CommandExecutor, List
 
         ItemStack resultPotion = createResultPotion(potionType, isSplash, isLingering, potionEffects);
         double price = calculatePrice(potionEffects.size());
-
-        // Округляем цену до ближайшего целого числа
         int roundedPrice = (int) Math.round(price);
 
-        // Проверяем баланс игрока
         if (playerPointsAPI.look(player.getUniqueId()) < roundedPrice) {
             player.sendMessage(colorize(config.getString("menu.not-enough-money", "&cНа вашем счете недостаточно средств")));
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
             return;
         }
 
-        // Снимаем деньги с игрока
         playerPointsAPI.take(player.getUniqueId(), roundedPrice);
 
-        // Отправляем сообщение игроку о списании денег
         String withdrawMessage = config.getString("economy.withdraw-message", "&aС вас списано {amount} $.");
         withdrawMessage = withdrawMessage.replace("{amount}", String.valueOf(roundedPrice));
         player.sendMessage(colorize(withdrawMessage));
